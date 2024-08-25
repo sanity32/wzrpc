@@ -1,5 +1,7 @@
 package wzrpc
 
+import "context"
+
 type Figure[TReq, TResp any] string
 
 func (f Figure[TReq, TResp]) Str() string {
@@ -12,6 +14,31 @@ func (f Figure[TReq, TResp]) Go(l Leader, opts any) (resp TResp, err error) {
 		return resp, err
 	} else {
 		return f.norm(r)
+	}
+}
+
+func (f Figure[TReq, TResp]) GoWithCtx(ctx context.Context, l Leader, opts any) (resp TResp, err error) {
+	stopped := false
+	defer func() { stopped = true }()
+
+	type respBundle struct {
+		Resp TResp
+		Err  error
+	}
+
+	ch := make(chan respBundle)
+	go func() {
+		resp, err := f.Go(l, opts)
+		if !stopped {
+			ch <- respBundle{resp, err}
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return resp, ctx.Err()
+	case r := <-ch:
+		return r.Resp, r.Err
 	}
 }
 
